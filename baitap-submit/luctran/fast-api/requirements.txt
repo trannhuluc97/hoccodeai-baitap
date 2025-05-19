@@ -1,0 +1,5 @@
+fastapi[all]
+diffusers==0.25.1
+transformers==4.36.2
+accelerate==1.7.0
+torch==2.3.0
