@@ -47,3 +47,8 @@ async def generate_base64_image(imgRequest: ImageRequest):
     img_str = base64.b64encode(buffered.getvalue())
     # API trả về một ảnh base64
     return {"image": img_str}
+
+
+# uvicorn 03-rest-api:app --reload --port 8080
+# --reload cho phép FastAPI tự động reload khi có thay đổi trong code.
+# --port 8080 để chọn port mà FastAPI sẽ chạy.
