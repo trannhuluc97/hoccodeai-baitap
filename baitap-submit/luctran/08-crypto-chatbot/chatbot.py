@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 import requests
 import yfinance as yf
 import json
+import gradio as gr
 
 
 def get_symbol(company: str) -> str:
@@ -71,11 +72,10 @@ FUNCTION_MAP = {
     "get_stock_price": get_stock_price
 }
 
-
-load_dotenv()
-# Đọc từ file .env cùng thư mục, nhưng đừng commit nha!
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = OpenAI(
+    base_url="https://api.openai.com/v1",
+    api_key='sk-proj-xxxx'
+)
 
 
 def get_completion(messages):
@@ -83,7 +83,6 @@ def get_completion(messages):
         model="gpt-4o-mini",
         messages=messages,
         tools=tools,
-        # Để temparature=0 để kết quả ổn định sau nhiều lần chạy
         temperature=0
     )
     return response
@@ -91,41 +90,53 @@ def get_completion(messages):
 
 # Bắt đầu làm bài tập từ line này!
 
-question = "Giá cổ phiếu hiện tại của Vinfast là bao nhiêu?"
+def chat_logic_AI(message, history_message):
+    messages = [
+        {"role": "system", "content": "You are a cheerful, playful, and slightly cheeky customer support assistant. Your job is to help users with accurate, clear, and helpful answers — but make it fun! Use a light-hearted, friendly tone, sprinkle in some emojis where appropriate, and don’t be afraid to crack a gentle joke or two. Think of yourself as a helpful bestie who happens to know everything about the company. Stay informative, but keep things casual, upbeat, and a little bit sassy (in a good way)."}
+    ]
+    for user_message, bot_message in history_message:
+        messages.append({"role": "user", "content": user_message})
+        messages.append({"role": "assistant", "content": bot_message})
+        
+    messages.append({"role": "user", "content": message})
+    
+    history_message.append([message, "waitting.."])
+    yield "", history_message
 
-messages = [
-    {"role": "system", "content": "You are a helpful customer support assistant. Use the supplied tools to assist the user."},
-    {"role": "user", "content": question}
-]
-
-response = get_completion(messages)
-first_choice = response.choices[0]
-finish_reason = first_choice.finish_reason
-
-# Loop cho tới khi model báo stop và đưa ra kết quả
-while finish_reason != "stop":
-    tool_call = first_choice.message.tool_calls[0]
-
-    tool_call_function = tool_call.function
-    tool_call_arguments = json.loads(tool_call_function.arguments)
-
-    tool_function = FUNCTION_MAP[tool_call_function.name]
-    result = tool_function(**tool_call_arguments)
-
-    messages.append(first_choice.message)
-    messages.append({
-        "role": "tool",
-        "tool_call_id": tool_call.id,
-        "name": tool_call_function.name,
-        "content": json.dumps({"result": result})
-    })
-
-    print(messages)
-
-    # Chờ kết quả từ LLM
     response = get_completion(messages)
     first_choice = response.choices[0]
     finish_reason = first_choice.finish_reason
 
-# In ra kết quả sau khi đã thoát khỏi vòng lặp
-print(first_choice.message.content)
+    # Loop cho tới khi model báo stop và đưa ra kết quả
+    while finish_reason != "stop":
+        tool_call = first_choice.message.tool_calls[0]
+        tool_call_function = tool_call.function
+        tool_call_arguments = json.loads(tool_call_function.arguments)
+
+        tool_function = FUNCTION_MAP[tool_call_function.name]
+        result = tool_function(**tool_call_arguments)
+
+        messages.append(first_choice.message)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call.id,
+            "name": tool_call_function.name,
+            "content": json.dumps({"result": result})
+        })
+
+        # Chờ kết quả từ LLM
+        response = get_completion(messages)
+        first_choice = response.choices[0]
+        finish_reason = first_choice.finish_reason
+
+    final_response = first_choice.message.content or ""
+    history_message[-1][1] = final_response
+    yield "", history_message
+
+with gr.Blocks() as blocks:
+    gr.Markdown("#Chatbot")
+    message = gr.Textbox(label="Nhập nội dung tin nhắn:")
+    chatbot = gr.Chatbot(label="Stock Chatbot", height=600)
+    message.submit(chat_logic_AI, [message, chatbot], [message, chatbot])
+
+blocks.launch()
